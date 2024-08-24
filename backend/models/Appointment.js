@@ -1,17 +1,13 @@
-const mongoose = require('mongoose');
-const Schema = mongoose.Schema;
+const mongoose = require('mongoose'); // Import Mongoose for interacting with MongoDB.
+const Schema = mongoose.Schema; // Create a shorthand reference to Mongoose's Schema constructor.
 
+// Define the Appointment schema
 const appointmentSchema = new Schema({
-  nailTechId: { type: Schema.Types.ObjectId, ref: 'UserProfile', required: true },
-  clientId: { type: Schema.Types.ObjectId, ref: 'UserProfile', required: true },
-  appointmentDate: { type: Date, required: true },
-  status: { type: String, required: true, enum: ['Scheduled', 'Completed', 'Cancelled'] },
-  services: [{
-    name: { type: String, required: true },
-    description: { type: String, required: true },
-    duration: { type: Number, required: true },
-    price: { type: Number, required: true }
-  }]
+  nailTechId: { type: Schema.Types.ObjectId, ref: 'UserProfile', required: true }, // Reference to the nail tech's user profile, required field.
+  clientId: { type: Schema.Types.ObjectId, ref: 'UserProfile', required: true },  // Reference to the client's user profile, required field.
+  appointmentDate: { type: Date, required: true }, // Date and time of the appointment, required field.
+  status: { type: String, required: true, enum: ['Scheduled', 'Completed', 'Cancelled'] }, // Status of the appointment with limited options.
+  services: [{ type: Schema.Types.ObjectId, ref: 'Service' }] // Array of services included in the appointment, referencing the Service model.
 }, {
   timestamps: true
 });
@@ -39,9 +35,9 @@ appointmentSchema.pre('save', async function(next) {
   const appointmentTime = appointment.appointmentDate.toTimeString().split(' ')[0]; // e.g., '09:00:00'
 
   const isAvailable = nailTech.availability.some(availability => {
-    return availability.dayOfWeek === appointmentDay &&
-           availability.startTime <= appointmentTime &&
-           availability.endTime >= appointmentTime;
+    return availability.dayOfWeek === appointmentDay && // Check if the day of the appointment matches an available day.
+           availability.startTime <= appointmentTime && // Ensure the appointment start time falls within availability.
+           availability.endTime >= appointmentTime; // Ensure the appointment end time falls within availability.
   });
   
   if (!isAvailable) {
@@ -58,10 +54,21 @@ appointmentSchema.pre('save', async function(next) {
     return next(new Error('Appointment date falls during the nail tech\'s time off'));
   }
   
-  next();
+    // Check for existing appointments at the same time
+   const existingAppointment = await mongoose.model('Appointment').findOne({
+    nailTechId: appointment.nailTechId,
+    appointmentDate: appointment.appointmentDate,
+    _id: { $ne: appointment._id } // Exclude the current appointment if updating
+  });
+
+  if (existingAppointment) {
+    return next(new Error('An appointment already exists at the same time and date'));
+  }
+  
+  next(); // Proceed with saving the document if all validations pass.
 });
 
-// Indexes
+// Indexes to improve query performance
 appointmentSchema.index({ nailTechId: 1 });
 appointmentSchema.index({ clientId: 1 });
 
